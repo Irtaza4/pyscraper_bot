@@ -1,6 +1,7 @@
 import logging
 from typing import List, Dict, Any, Callable, Optional
 from urllib.parse import urlparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .fetcher import HTTPFetcher
 from .contact_extractor import ContactExtractor
@@ -11,7 +12,7 @@ logger = logging.getLogger("LeadCrawler")
 BAD_TITLE_KEYWORDS = ["checking your browser", "just a moment", "attention required", "cloudflare", "403 forbidden", "access denied", "security check"]
 
 class LeadCrawler:
-    """Multi-domain crawler that deeply scans websites for lead contact details."""
+    """Multi-domain crawler that deeply scans websites concurrently using multi-threading."""
 
     def __init__(self, fetcher: Optional[HTTPFetcher] = None):
         self.fetcher = fetcher or HTTPFetcher()
@@ -59,6 +60,8 @@ class LeadCrawler:
         all_phones = set(base_data.get("phones", []))
         socials = base_data.get("socials", {})
         subpages = base_data.get("contact_subpages", [])
+        dm_name = base_data.get("decision_maker_name", "")
+        dm_role = base_data.get("decision_maker_role", "Founder & CEO")
 
         # 2. Deep scan subpages if emails are missing or sparse
         scanned_subpages = []
@@ -70,6 +73,9 @@ class LeadCrawler:
                     sub_data = ContactExtractor.extract_from_html(sub_html, sub_url)
                     all_emails.update(sub_data.get("emails", []))
                     all_phones.update(sub_data.get("phones", []))
+                    if not dm_name and sub_data.get("decision_maker_name"):
+                        dm_name = sub_data["decision_maker_name"]
+                        dm_role = sub_data["decision_maker_role"]
                     for plat, link in sub_data.get("socials", {}).items():
                         if plat not in socials:
                             socials[plat] = link
@@ -94,10 +100,37 @@ class LeadCrawler:
         primary_email = list(all_emails)[0] if all_emails else ""
         primary_phone = list(all_phones)[0] if all_phones else ""
 
+        # Detect Business Age Category
+        from .lead_finder import LeadFinder
+        full_text = f"{base_data.get('title', '')} {base_data.get('meta_description', '')}"
+        age_category = LeadFinder.detect_business_age(full_text)
+
+        # Enrich via Explorium Data & Contact Enrichment API
+        from .explorium_client import ExploriumClient
+        explorium = ExploriumClient()
+        exp_data = explorium.enrich_full_lead(domain, company_name=company_name, decision_maker_name=dm_name)
+
+        if exp_data.get("explorium_emails"):
+            all_emails.update(exp_data["explorium_emails"])
+        if exp_data.get("explorium_phones"):
+            all_phones.update(exp_data["explorium_phones"])
+        if exp_data.get("linkedin_company") and not socials.get("LinkedIn"):
+            socials["LinkedIn"] = exp_data["linkedin_company"]
+
+        primary_email = list(all_emails)[0] if all_emails else ""
+        primary_phone = list(all_phones)[0] if all_phones else ""
+
         return {
             "domain": domain,
             "company_name": company_name,
             "url": url,
+            "age_category": age_category,
+            "explorium_verified": exp_data.get("explorium_verified", False),
+            "employee_count": exp_data.get("employee_count", ""),
+            "revenue_range": exp_data.get("revenue_range", ""),
+            "funding_total": exp_data.get("funding_total", ""),
+            "decision_maker_name": dm_name,
+            "decision_maker_role": dm_role,
             "primary_email": primary_email,
             "all_emails": ", ".join(all_emails),
             "primary_phone": primary_phone,
@@ -115,14 +148,23 @@ class LeadCrawler:
             "status": "Success" if primary_email else "No email found"
         }
 
-    def crawl_batch(self, urls: List[str], progress_callback: Optional[Callable[[int, int, str], None]] = None) -> List[Dict[str, Any]]:
+    def crawl_batch(self, urls: List[str], max_workers: int = 8, progress_callback: Optional[Callable[[int, int, str], None]] = None) -> List[Dict[str, Any]]:
+        """Crawl batch URLs concurrently with 8 parallel worker threads."""
         results = []
         total = len(urls)
-        for i, u in enumerate(urls, 1):
-            if not u.strip():
-                continue
-            if progress_callback:
-                progress_callback(i, total, u)
-            lead = self.crawl_domain(u.strip())
-            results.append(lead)
+        completed_count = 0
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_url = {executor.submit(self.crawl_domain, u.strip()): u.strip() for u in urls if u.strip()}
+            for future in as_completed(future_to_url):
+                completed_count += 1
+                u = future_to_url[future]
+                if progress_callback:
+                    progress_callback(completed_count, total, u)
+                try:
+                    lead = future.result()
+                    results.append(lead)
+                except Exception:
+                    pass
+
         return results

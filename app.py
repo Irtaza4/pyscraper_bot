@@ -4,7 +4,7 @@ import time
 import pandas as pd
 import streamlit as st
 
-from scraper import LeadCrawler, DataExporter, LeadFinder, INDUSTRY_PRESETS
+from scraper import LeadCrawler, DataExporter, LeadFinder, COUNTRY_OPTIONS, ROLE_OPTIONS, INDUSTRY_PRESETS
 from outreach import CVParser, PitchGenerator, EmailSender
 
 # Page Configuration
@@ -36,15 +36,6 @@ st.markdown("""
         padding: 1.2rem;
         text-align: center;
     }
-    .metric-value {
-        font-size: 1.8rem;
-        font-weight: bold;
-        color: #6366F1;
-    }
-    .metric-label {
-        font-size: 0.9rem;
-        color: #A6ADC8;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -74,13 +65,17 @@ with st.sidebar:
     st.markdown(f"🌐 [Portfolio Website]({portfolio_url})")
 
     st.divider()
+    already_sent_count = len(EmailSender.get_already_sent_emails())
+    st.markdown(f"🛡️ **Deduplication Active**: `{already_sent_count}` previous emails logged & blocked from re-sending.")
+
+    st.divider()
     st.markdown("### 📱 Published Apps")
     for app in profile.get("published_apps", [])[:3]:
         st.markdown(f"• **{app['name']}** - *{app['tagline']}*")
 
 # Main Header
 st.markdown('<div class="main-header">🚀 PyScraper Pro - Lead Scraper & Outreach Bot</div>', unsafe_allow_html=True)
-st.markdown(f'<div class="sub-header">Find businesses needing App Development services, generate personalized pitches, and send cold emails directly as <b>{dev_name}</b>.</div>', unsafe_allow_html=True)
+st.markdown(f'<div class="sub-header">Find 100+ business leads & decision makers, generate personalized pitches, and send bulk cold emails directly as <b>{dev_name}</b>.</div>', unsafe_allow_html=True)
 
 # Tabs Navigation
 tab1, tab2, tab3, tab4 = st.tabs([
@@ -93,50 +88,76 @@ tab1, tab2, tab3, tab4 = st.tabs([
 # ==================== TAB 1: LEAD FINDER & SCRAPER ====================
 with tab1:
     st.header("🔍 Lead Finder & Contact Scraper")
-    st.write("Auto-discover target companies by industry/location OR enter custom website URLs to extract emails, phone numbers, and score app opportunity.")
+    st.write("Auto-discover target companies & decision makers (CEOs/Founders) by Country & Industry.")
 
     scrape_mode = st.radio(
         "Choose Lead Discovery Method:",
-        options=["🎯 Auto-Discover Businesses by Search/Industry", "📝 Manual URL List Input"],
+        options=["🎯 Auto-Discover Businesses by Country & Industry", "📝 Manual URL List Input"],
         horizontal=True
     )
 
-    if scrape_mode == "🎯 Auto-Discover Businesses by Search/Industry":
-        c1, c2, c3 = st.columns([1.5, 1, 1])
+    if scrape_mode == "🎯 Auto-Discover Businesses by Country & Industry":
+        r1, r2, r3, r4, r5 = st.columns([1.4, 1.1, 1.1, 1.1, 1])
 
-        with c1:
+        with r1:
             selected_preset_name = st.selectbox(
                 "Target Industry Category:",
                 options=list(INDUSTRY_PRESETS.keys())
             )
             default_query = INDUSTRY_PRESETS[selected_preset_name]
 
-        with c2:
-            country_location = st.text_input("Target Location/Country:", value="USA", help="e.g. USA, UK, UAE, Pakistan, Canada")
+        with r2:
+            selected_country_label = st.selectbox(
+                "Target Country:",
+                options=list(COUNTRY_OPTIONS.keys()),
+                index=0
+            )
+            target_country = COUNTRY_OPTIONS[selected_country_label]
 
-        with c3:
-            max_leads = st.slider("Max Leads to Find", min_value=5, max_value=100, step=5, value=30, help="Up to 100 leads per batch!")
+        with r3:
+            selected_role_label = st.selectbox(
+                "Target Decision Maker Role:",
+                options=list(ROLE_OPTIONS.keys()),
+                index=0
+            )
+            target_role = ROLE_OPTIONS[selected_role_label]
+
+        with r4:
+            freshness_label = st.selectbox(
+                "Lead Age / Freshness:",
+                options=["🌟 All Leads (New & Old)", "🆕 Newly Launched First", "🏛️ Established First"],
+                index=0,
+                help="Search and prioritize both newly launched businesses and established companies."
+            )
+
+        with r5:
+            max_leads = st.slider("Max Leads Target", min_value=10, max_value=100, step=10, value=100, help="Discovers up to 100 potential leads per run!")
 
         custom_search_kw = st.text_input(
             "Custom Search Keywords (Optional):",
-            value=f"{default_query} in {country_location}",
-            help="Full search query used to discover company websites."
+            value=f"{default_query}",
+            help="Clean search query used to discover company websites."
         )
 
-        start_auto_search = st.button("🚀 Auto-Discover & Scrape Business Leads", type="primary", use_container_width=True)
+        start_auto_search = st.button("🚀 Auto-Discover 100 Potential Leads", type="primary", use_container_width=True)
 
         if start_auto_search:
             status_box = st.empty()
             progress_bar = st.progress(0)
 
-            status_box.info(f"🔎 Searching web across multi-page results for '{custom_search_kw}' (Target: {max_leads} leads)...")
+            status_box.info(f"🔎 Searching web for up to {max_leads} potential business targets ({freshness_label}) in {selected_country_label}...")
             finder = LeadFinder()
-            discovered = finder.search_businesses(custom_search_kw, max_results=max_leads)
+            discovered = finder.search_businesses(query=custom_search_kw, country=target_country, role=target_role, max_results=max_leads)
+
+            if freshness_label == "🆕 Newly Launched First":
+                discovered.sort(key=lambda d: 0 if d.get("age_category") == "🆕 Newly Launched" else 1)
+            elif freshness_label == "🏛️ Established First":
+                discovered.sort(key=lambda d: 0 if d.get("age_category") == "🏛️ Established" else 1)
 
             if not discovered:
-                st.warning("No business websites found for this query. Try adjusting location or keywords.")
+                st.warning("No business websites found for this query. Try adjusting country or keywords.")
             else:
-                status_box.success(f"Found {len(discovered)} target business websites! Starting deep contact extraction...")
+                status_box.success(f"Found {len(discovered)} potential business websites ({freshness_label})! Starting deep contact & decision-maker extraction...")
                 urls_to_crawl = [d["url"] for d in discovered]
 
                 crawler = LeadCrawler()
@@ -144,10 +165,14 @@ with tab1:
                     progress_bar.progress(current / total)
                     status_box.text(f"Scraping ({current}/{total}): {url}")
 
-                results = crawler.crawl_batch(urls_to_crawl, progress_callback=auto_progress_cb)
-                st.session_state["scraped_leads"] = results
-                status_box.text(f"✅ Scraping completed! Extracted {len(results)} leads.")
-                st.success(f"Successfully scraped {len(results)} business targets!")
+                raw_results = crawler.crawl_batch(urls_to_crawl, progress_callback=auto_progress_cb)
+
+                # Deduplicate against previous campaigns
+                deduped_results = EmailSender.filter_already_sent(raw_results)
+                st.session_state["scraped_leads"] = deduped_results
+
+                status_box.text(f"✅ Scraping completed! Extracted {len(deduped_results)} new leads ({len(raw_results) - len(deduped_results)} previously emailed leads excluded).")
+                st.success(f"Successfully scraped {len(deduped_results)} unique business targets ready for outreach!")
 
     else:
         col_input, col_config = st.columns([2, 1])
@@ -181,11 +206,12 @@ with tab1:
                     progress_bar.progress(current / total)
                     status_text.text(f"Scraping ({current}/{total}): {url}")
 
-                results = crawler.crawl_batch(url_list, progress_callback=progress_cb)
-                st.session_state["scraped_leads"] = results
+                raw_results = crawler.crawl_batch(url_list, progress_callback=progress_cb)
+                deduped_results = EmailSender.filter_already_sent(raw_results)
+                st.session_state["scraped_leads"] = deduped_results
 
-                status_text.text(f"✅ Scraping completed! Extracted {len(results)} leads.")
-                st.success(f"Successfully scraped {len(results)} business targets!")
+                status_text.text(f"✅ Scraping completed! Extracted {len(deduped_results)} leads.")
+                st.success(f"Successfully scraped {len(deduped_results)} business targets!")
 
     # Display Scraped Data
     if st.session_state["scraped_leads"]:
@@ -194,18 +220,20 @@ with tab1:
         st.subheader(f"Extracted Business Leads ({len(leads_df)})")
 
         # Metrics overview
-        m1, m2, m3, m4 = st.columns(4)
+        m1, m2, m3, m4, m5 = st.columns(5)
         total_leads = len(leads_df)
         with_email = len(leads_df[leads_df["primary_email"].astype(bool)]) if "primary_email" in leads_df.columns else 0
+        explorium_ver = len(leads_df[leads_df["explorium_verified"] == True]) if "explorium_verified" in leads_df.columns else 0
         hot_leads = len(leads_df[leads_df["category"].str.contains("Hot", na=False)]) if "category" in leads_df.columns else 0
         no_apps = len(leads_df[leads_df["has_app"] == False]) if "has_app" in leads_df.columns else 0
 
         m1.metric("Total Websites", total_leads)
         m2.metric("Valid Emails Found", with_email)
-        m3.metric("Hot Leads 🔥", hot_leads)
-        m4.metric("No Existing Mobile App", no_apps)
+        m3.metric("✨ Explorium Verified", explorium_ver)
+        m4.metric("Hot Leads 🔥", hot_leads)
+        m5.metric("No Mobile App", no_apps)
 
-        cols_to_show = [c for c in ["company_name", "primary_email", "primary_phone", "category", "score", "url", "reasons"] if c in leads_df.columns]
+        cols_to_show = [c for c in ["company_name", "age_category", "decision_maker_name", "decision_maker_role", "primary_email", "primary_phone", "employee_count", "revenue_range", "funding_total", "category", "score", "url"] if c in leads_df.columns]
         st.dataframe(leads_df[cols_to_show], use_container_width=True)
 
         # Export Buttons
@@ -230,6 +258,8 @@ with tab2:
         format_func=lambda k: next(t["name"] for t in template_options if t["key"] == k)
     )
 
+    use_groq_ai = st.toggle("⚡ Use Groq AI (Llama 3.3 70B) Hyper-Personalized Pitch Generator", value=True)
+
     if st.session_state["scraped_leads"]:
         leads_with_email = [l for l in st.session_state["scraped_leads"] if l.get("primary_email")]
         if leads_with_email:
@@ -239,7 +269,18 @@ with tab2:
             )
             target_lead = next(l for l in leads_with_email if l["company_name"] == selected_lead_company)
 
-            pitch = PitchGenerator.generate_pitch(target_lead, selected_template_key)
+            if use_groq_ai:
+                if st.button("🤖 Generate 1-to-1 Groq AI Personal Pitch", type="primary", use_container_width=True):
+                    with st.spinner("⚡ Groq AI (Llama 3.3 70B) is writing customized outreach pitch..."):
+                        from scraper.groq_client import GroqClient
+                        groq = GroqClient()
+                        dev_prof = {"name": dev_name, "role": dev_role, "portfolio": portfolio_url}
+                        ai_pitch = groq.generate_personalized_cold_email(target_lead, dev_prof, selected_template_key)
+                        st.session_state["current_ai_pitch"] = ai_pitch
+
+                pitch = st.session_state.get("current_ai_pitch") or PitchGenerator.generate_pitch(target_lead, selected_template_key)
+            else:
+                pitch = PitchGenerator.generate_pitch(target_lead, selected_template_key)
 
             st.subheader("Subject Line:")
             st.code(pitch["subject"], language="text")
@@ -249,8 +290,7 @@ with tab2:
         else:
             st.info("No leads with valid emails found in your current scraped list. Scrape or discover new leads in Tab 1.")
     else:
-        # Sample Preview
-        sample_lead = {"company_name": "Acme Retail Services", "url": "https://acmeretail.com", "primary_email": "contact@acmeretail.com"}
+        sample_lead = {"company_name": "Acme Retail Services", "url": "https://acmeretail.com", "primary_email": "contact@acmeretail.com", "decision_maker_name": "John Smith", "decision_maker_role": "CEO"}
         pitch = PitchGenerator.generate_pitch(sample_lead, selected_template_key)
         st.subheader("Sample Subject Line:")
         st.code(pitch["subject"], language="text")
@@ -315,10 +355,16 @@ with tab3:
     with col_campaign:
         st.subheader("3. Launch Batch Outreach Campaign")
 
-        leads_to_mail = [l for l in st.session_state["scraped_leads"] if l.get("primary_email")]
+        raw_leads_with_email = [l for l in st.session_state["scraped_leads"] if l.get("primary_email")]
+        leads_to_mail = EmailSender.filter_already_sent(raw_leads_with_email)
+
+        excluded_count = len(raw_leads_with_email) - len(leads_to_mail)
+        if excluded_count > 0:
+            st.warning(f"🛡️ **Deduplication**: Excluded {excluded_count} lead(s) that received emails in past campaigns.")
+
         st.info(f"Target Leads Ready for Outreach: **{len(leads_to_mail)}**")
 
-        delay_between_mails = st.slider("Delay Between Emails (Seconds):", 10, 120, 30, help="Prevents spam rate limits.")
+        delay_between_mails = st.slider("Delay Between Emails (Seconds):", 1, 30, 2, help="Fast bulk dispatch! Default is 2 seconds.")
 
         launch_campaign = st.button("🚀 Launch Batch Cold Outreach", type="primary", use_container_width=True)
 
@@ -326,7 +372,7 @@ with tab3:
             if not gmail_app_password:
                 st.error("Please provide your Gmail App Password.")
             elif not leads_to_mail:
-                st.error("No valid leads with emails available. Please discover or scrape leads in Tab 1 first.")
+                st.error("No new valid leads with emails available. (All leads have either received an email or have no email). Please discover new leads in Tab 1!")
             else:
                 sender = EmailSender(sender_email=sender_email, sender_password=gmail_app_password)
 

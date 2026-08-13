@@ -7,7 +7,7 @@ from .contact_extractor import ContactExtractor
 from .lead_scorer import LeadScorer
 from .crawler import LeadCrawler
 from .exporter import DataExporter
-from .lead_finder import LeadFinder, INDUSTRY_PRESETS
+from .lead_finder import LeadFinder, COUNTRY_OPTIONS, ROLE_OPTIONS, INDUSTRY_PRESETS
 
 __all__ = [
     "HTTPFetcher",
@@ -16,5 +16,7 @@ __all__ = [
     "LeadCrawler",
     "DataExporter",
     "LeadFinder",
+    "COUNTRY_OPTIONS",
+    "ROLE_OPTIONS",
     "INDUSTRY_PRESETS",
 ]

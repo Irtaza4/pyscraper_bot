@@ -1,0 +1,24 @@
+# Environment variables and secrets
+.env
+*.env
+
+# Python & Virtual Environment
+.venv/
+env/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Search caches and logs
+search_cache.json
+serper_cache.json
+outreach_log.csv
+*.log
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Antigravity temporary scratch files
+scratch/

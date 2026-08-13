@@ -4,7 +4,7 @@ EMAIL_TEMPLATES = {
     "opportunity_audit": {
         "name": "Mobile App Opportunity Audit (Recommended)",
         "subject": "Mobile App Idea for {{ company_name }} | Flutter Developer Intro",
-        "body_template": """Hi {{ company_name }} Team,
+        "body_template": """Hi {{ greeting_name }},
 
 I came across {{ company_name }} ({{ url }}) while researching businesses in your space, and I was really impressed by your services.
 
@@ -36,7 +36,7 @@ Flutter & Mobile App Developer
     "direct_developer": {
         "name": "Direct Freelance Developer Pitch",
         "subject": "Experienced Cross-Platform Mobile Developer available for {{ company_name }}",
-        "body_template": """Hello {{ company_name }} Team,
+        "body_template": """Hello {{ greeting_name }},
 
 I'm reaching out to introduce myself — my name is Irtaza Khalid, a Flutter Developer specializing in high-performance iOS and Android mobile apps.
 
@@ -64,13 +64,12 @@ Flutter Developer | iOS & Android Apps
 🌐 Portfolio: https://irtaza-dev.netlify.app
 📧 Email: Irtazakhalidll@gmail.com
 📱 Phone: +92 308 4221084
-📸 Instagram: https://www.instagram.com/irtaza.codes?igsh=d25zeDNwOHc4bzV2&utm_source=qr
 """
     },
     "free_consultation": {
         "name": "Free 15-Min Mobile Strategy Call",
         "subject": "Quick mobile app question for {{ company_name }}",
-        "body_template": """Hi {{ company_name }} Team,
+        "body_template": """Hi {{ greeting_name }},
 
 Hope you're having a great week!
 
@@ -98,7 +97,7 @@ Flutter & Mobile Developer
 }
 
 class PitchGenerator:
-    """Generates personalized email pitches for target lead companies."""
+    """Generates personalized email pitches for target lead companies & decision makers."""
 
     @staticmethod
     def list_template_keys() -> List[Dict[str, str]]:
@@ -110,8 +109,16 @@ class PitchGenerator:
         company_name = lead.get("company_name") or "Business"
         url = lead.get("url") or lead.get("domain") or "your website"
 
+        dm_name = lead.get("decision_maker_name", "").strip()
+        dm_role = lead.get("decision_maker_role", "Founder").strip()
+
+        if dm_name:
+            greeting_name = f"{dm_name} ({dm_role} at {company_name})"
+        else:
+            greeting_name = f"{company_name} Team"
+
         subject = template_info["subject"].replace("{{ company_name }}", company_name)
-        body = template_info["body_template"].replace("{{ company_name }}", company_name).replace("{{ url }}", url)
+        body = template_info["body_template"].replace("{{ company_name }}", company_name).replace("{{ greeting_name }}", greeting_name).replace("{{ url }}", url)
 
         return {
             "subject": subject,
