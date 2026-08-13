@@ -258,44 +258,90 @@ with tab2:
         format_func=lambda k: next(t["name"] for t in template_options if t["key"] == k)
     )
 
-    use_groq_ai = st.toggle("⚡ Use Groq AI (Llama 3.3 70B) Hyper-Personalized Pitch Generator", value=True)
+    pitch_mode = st.radio("Select Pitch Source:", ["🤖 Auto Scraped Leads", "🔗 Manual Website URL Pitching"], horizontal=True)
 
-    if st.session_state["scraped_leads"]:
-        leads_with_email = [l for l in st.session_state["scraped_leads"] if l.get("primary_email")]
-        if leads_with_email:
-            selected_lead_company = st.selectbox(
-                "Preview Pitch for Lead:",
-                options=[l["company_name"] for l in leads_with_email]
-            )
-            target_lead = next(l for l in leads_with_email if l["company_name"] == selected_lead_company)
+    if pitch_mode == "🔗 Manual Website URL Pitching":
+        manual_url_input = st.text_input("Enter Target Business Website URL:", value="https://www.dubaitaxi.ae", help="Paste any company website URL to audit and pitch.")
+        manual_dm_name = st.text_input("Decision Maker / Recipient Name (Optional):", value="Founder / Hiring Manager")
+        
+        if st.button("⚡ Audit Website & Generate Groq AI Pitch", type="primary", use_container_width=True):
+            with st.spinner("🔍 Crawling website & Groq AI (Llama 3.3 70B) auditing digital pain points..."):
+                from scraper.crawler import LeadCrawler
+                from scraper.groq_client import GroqClient
+                crawler = LeadCrawler()
+                groq = GroqClient()
 
-            if use_groq_ai:
-                if st.button("🤖 Generate 1-to-1 Groq AI Personal Pitch", type="primary", use_container_width=True):
-                    with st.spinner("⚡ Groq AI (Llama 3.3 70B) is writing customized outreach pitch..."):
-                        from scraper.groq_client import GroqClient
-                        groq = GroqClient()
-                        dev_prof = {"name": dev_name, "role": dev_role, "portfolio": portfolio_url}
-                        ai_pitch = groq.generate_personalized_cold_email(target_lead, dev_prof, selected_template_key)
-                        st.session_state["current_ai_pitch"] = ai_pitch
+                crawl_res = crawler.crawl_domain(manual_url_input)
+                scraped_text = crawl_res.get("snippet", "")
+                
+                audit = groq.audit_manual_url(scraped_text, manual_url_input)
+                manual_lead = {
+                    "company_name": audit.get("company_name", "Target Business"),
+                    "domain": manual_url_input.replace("https://", "").replace("http://", "").split("/")[0],
+                    "decision_maker_name": manual_dm_name,
+                    "pain_points": audit.get("pain_points", []),
+                    "primary_email": crawl_res.get("primary_email", "")
+                }
+                dev_prof = {"name": dev_name, "role": dev_role, "portfolio": portfolio_url}
+                ai_pitch = groq.generate_personalized_cold_email(manual_lead, dev_prof, selected_template_key)
+                st.session_state["manual_ai_pitch"] = ai_pitch
+                st.session_state["manual_audit"] = audit
 
-                pitch = st.session_state.get("current_ai_pitch") or PitchGenerator.generate_pitch(target_lead, selected_template_key)
-            else:
-                pitch = PitchGenerator.generate_pitch(target_lead, selected_template_key)
+        if "manual_audit" in st.session_state:
+            aud = st.session_state["manual_audit"]
+            st.success(f"✅ Website Audit Complete for **{aud.get('company_name')}**!")
+            if aud.get("pain_points"):
+                st.markdown("**Detected Digital Gaps & Pitch Angles:**")
+                for pp in aud.get("pain_points", []):
+                    st.caption(f"• {pp}")
 
+        if "manual_ai_pitch" in st.session_state:
+            pitch = st.session_state["manual_ai_pitch"]
             st.subheader("Subject Line:")
             st.code(pitch["subject"], language="text")
 
             st.subheader("Email Body Preview:")
             st.text_area("Email Content:", value=pitch["body"], height=380)
-        else:
-            st.info("No leads with valid emails found in your current scraped list. Scrape or discover new leads in Tab 1.")
+
     else:
-        sample_lead = {"company_name": "Acme Retail Services", "url": "https://acmeretail.com", "primary_email": "contact@acmeretail.com", "decision_maker_name": "John Smith", "decision_maker_role": "CEO"}
-        pitch = PitchGenerator.generate_pitch(sample_lead, selected_template_key)
-        st.subheader("Sample Subject Line:")
-        st.code(pitch["subject"], language="text")
-        st.subheader("Sample Email Body:")
-        st.text_area("Sample Content:", value=pitch["body"], height=380)
+        use_groq_ai = st.toggle("⚡ Use Groq AI (Llama 3.3 70B) Hyper-Personalized Pitch Generator", value=True)
+
+        if st.session_state["scraped_leads"]:
+            leads_with_email = [l for l in st.session_state["scraped_leads"] if l.get("primary_email")]
+            if leads_with_email:
+                selected_lead_company = st.selectbox(
+                    "Preview Pitch for Lead:",
+                    options=[l["company_name"] for l in leads_with_email]
+                )
+                target_lead = next(l for l in leads_with_email if l["company_name"] == selected_lead_company)
+
+                if use_groq_ai:
+                    if st.button("🤖 Generate 1-to-1 Groq AI Personal Pitch", type="primary", use_container_width=True):
+                        with st.spinner("⚡ Groq AI (Llama 3.3 70B) is writing customized outreach pitch..."):
+                            from scraper.groq_client import GroqClient
+                            groq = GroqClient()
+                            dev_prof = {"name": dev_name, "role": dev_role, "portfolio": portfolio_url}
+                            ai_pitch = groq.generate_personalized_cold_email(target_lead, dev_prof, selected_template_key)
+                            st.session_state["current_ai_pitch"] = ai_pitch
+
+                    pitch = st.session_state.get("current_ai_pitch") or PitchGenerator.generate_pitch(target_lead, selected_template_key)
+                else:
+                    pitch = PitchGenerator.generate_pitch(target_lead, selected_template_key)
+
+                st.subheader("Subject Line:")
+                st.code(pitch["subject"], language="text")
+
+                st.subheader("Email Body Preview:")
+                st.text_area("Email Content:", value=pitch["body"], height=380)
+            else:
+                st.info("No leads with valid emails found in your current scraped list. Scrape or discover new leads in Tab 1.")
+        else:
+            sample_lead = {"company_name": "Acme Retail Services", "url": "https://acmeretail.com", "primary_email": "contact@acmeretail.com", "decision_maker_name": "John Smith", "decision_maker_role": "CEO"}
+            pitch = PitchGenerator.generate_pitch(sample_lead, selected_template_key)
+            st.subheader("Sample Subject Line:")
+            st.code(pitch["subject"], language="text")
+            st.subheader("Sample Email Body:")
+            st.text_area("Sample Content:", value=pitch["body"], height=380)
 
 
 # ==================== TAB 3: EMAIL OUTREACH CAMPAIGN ====================

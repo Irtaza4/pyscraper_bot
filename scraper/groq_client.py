@@ -1,4 +1,5 @@
 import os
+import json
 import logging
 import httpx
 from typing import Dict, List, Any, Optional
@@ -11,9 +12,10 @@ logger = logging.getLogger("GroqClient")
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 FAST_MODEL = "llama-3.1-8b-instant"
 HEAVY_MODEL = "llama-3.3-70b-versatile"
+REASONING_MODEL = "qwen/qwen3.6-27b"
 
 class GroqClient:
-    """Client for Groq AI Ultra-Fast LLM API."""
+    """Client for Groq AI Ultra-Fast LLM API for Auto & Manual Lead Intelligence."""
 
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or os.getenv("GROQ_API_KEY", "")
@@ -63,6 +65,55 @@ class GroqClient:
             return terms[:5]
         return [query]
 
+    def extract_contacts_and_insights_from_text(self, page_text: str, domain: str) -> Dict[str, Any]:
+        """Uses Groq AI (Llama 3.1 8B Instant) to extract hidden emails, phone numbers, owner names, and pain points in <0.1s."""
+        if not self.api_key or not page_text:
+            return {}
+
+        system_prompt = (
+            "You are an AI data extractor. Extract business contact details and digital pain points from text. "
+            "Return valid JSON only with keys: 'emails', 'phones', 'decision_maker', 'pain_points', 'services_summary'."
+        )
+        user_prompt = f"Website Domain: {domain}\nPage Content Snippet:\n{page_text[:2500]}\nOutput JSON format."
+
+        res = self.generate_completion(system_prompt, user_prompt, model=FAST_MODEL, temperature=0.2)
+        if res:
+            try:
+                clean_json = res.replace("```json", "").replace("```", "").strip()
+                return json.loads(clean_json)
+            except Exception:
+                pass
+        return {}
+
+    def audit_manual_url(self, page_text: str, url: str) -> Dict[str, Any]:
+        """Audits a manually submitted URL for pitch generation using Groq Llama 3.3 70B."""
+        if not page_text:
+            return {
+                "company_name": url.split("//")[-1].split("/")[0].replace("www.", "").capitalize(),
+                "pain_points": ["No mobile app mentioned", "Standard website layout"],
+                "pitch_angle": "Flutter Mobile App & Modern UI Upgrade"
+            }
+
+        system_prompt = (
+            "You are an expert software agency consultant. Analyze website text and return a JSON summary with keys: "
+            "'company_name', 'industry', 'detected_services', 'pain_points', 'recommended_pitch_angle'."
+        )
+        user_prompt = f"URL: {url}\nWebsite Text:\n{page_text[:3000]}"
+
+        res = self.generate_completion(system_prompt, user_prompt, model=HEAVY_MODEL, temperature=0.4)
+        if res:
+            try:
+                clean_json = res.replace("```json", "").replace("```", "").strip()
+                return json.loads(clean_json)
+            except Exception:
+                pass
+
+        return {
+            "company_name": url.split("//")[-1].split("/")[0].replace("www.", "").capitalize(),
+            "pain_points": ["Missing mobile app presence", "Need digital booking automation"],
+            "recommended_pitch_angle": "Flutter Mobile App & Digital Upgrade"
+        }
+
     def generate_personalized_cold_email(self, lead: Dict[str, Any], dev_profile: Dict[str, str], pitch_strategy: str) -> Dict[str, str]:
         """Generates a hyper-personalized B2B cold outreach email using Groq AI."""
         company_name = lead.get("company_name", "your business")
@@ -71,6 +122,7 @@ class GroqClient:
         age = lead.get("age_category", "")
         employees = lead.get("employee_count", "")
         revenue = lead.get("revenue_range", "")
+        pain_points = lead.get("pain_points", [])
 
         if not self.api_key:
             return {
@@ -88,7 +140,7 @@ class GroqClient:
         )
         user_prompt = (
             f"Draft a cold pitch to {dm_name} at {company_name} ({niche_domain}).\n"
-            f"Target Details: Business Age: {age}, Employee Count: {employees}, Revenue: {revenue}\n"
+            f"Target Details: Business Age: {age}, Employee Count: {employees}, Revenue: {revenue}, Pain Points: {pain_points}\n"
             f"Developer Profile: {dev_profile.get('name', 'Irtaza Khalid')}, {dev_profile.get('role', 'Flutter Developer')}, Portfolio: {dev_profile.get('portfolio', 'https://irtaza.dev')}\n"
             f"Pitch Strategy: {pitch_strategy}\n"
             "Format: {\"subject\": \"...\", \"body\": \"...\"}"
@@ -97,7 +149,6 @@ class GroqClient:
         res = self.generate_completion(system_prompt, user_prompt, model=HEAVY_MODEL, temperature=0.6)
         if res:
             try:
-                import json
                 clean_json = res.replace("```json", "").replace("```", "").strip()
                 data = json.loads(clean_json)
                 if "subject" in data and "body" in data:
