@@ -1,0 +1,50 @@
+{
+  "developer": {
+    "full_name": "Irtaza Khalid",
+    "title": "Flutter & Cross-Platform Mobile App Developer",
+    "location": "Lahore, Pakistan",
+    "email": "Irtazakhalidll@gmail.com",
+    "phone": "+92 308 4221084",
+    "portfolio": "https://irtaza-dev.netlify.app",
+    "linkedin": "https://linkedin.com/in/irtaza-khalid",
+    "github": "https://github.com/Irtaza4",
+    "instagram": "https://www.instagram.com/irtaza.codes?igsh=d25zeDNwOHc4bzV2&utm_source=qr",
+    "summary": "Results-driven Flutter Developer with extensive experience building, publishing, and maintaining production iOS & Android mobile apps on Apple App Store and Google Play Store.",
+    "core_skills": [
+      "Flutter SDK", "Dart", "Clean Architecture", "Provider State Management",
+      "RESTful APIs", "WebSockets", "Firebase (Firestore, Realtime DB, Auth)",
+      "Node.js", "Google Maps API", "Foreground Services & Location Tracking",
+      "Push Notifications (FCM, OneSignal)", "Apple App Store & Google Play Publishing"
+    ],
+    "published_apps": [
+      {
+        "name": "JobSnap",
+        "tagline": "On-Demand Job Marketplace App",
+        "description": "Cross-platform marketplace connecting service providers and clients with real-time bidding, role-based access, and WebSockets messaging.",
+        "platforms": ["Apple App Store", "Google Play Store"]
+      },
+      {
+        "name": "RideHoppy",
+        "tagline": "Dual Ride-Sharing Platform (Rider & Driver)",
+        "description": "Real-time vehicle tracking with Google Maps API, fare estimation, route navigation, and wallet management.",
+        "platforms": ["Apple App Store (Rider & Driver)", "Google Play Store (Rider & Driver)"]
+      },
+      {
+        "name": "B2B Cabs",
+        "tagline": "Corporate Transportation System",
+        "description": "Dual mobile apps for companies and drivers automating employee transit with background location tracking and driver dispatch.",
+        "platforms": ["Apple App Store", "Google Play Store"]
+      },
+      {
+        "name": "WatchLine",
+        "tagline": "Automated Personal Safety Check-In App",
+        "description": "Safety check-in app with background timers and automated emergency email notifications."
+      },
+      {
+        "name": "Rung King",
+        "tagline": "2D Multiplayer Card Game",
+        "description": "2D card game built with Flame Engine, real-time multiplayer via WebSockets and AI opponents."
+      }
+    ]
+  }
+}
