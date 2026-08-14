@@ -117,6 +117,20 @@ class LeadCrawler:
         if exp_data.get("linkedin_company") and not socials.get("LinkedIn"):
             socials["LinkedIn"] = exp_data["linkedin_company"]
 
+        # Enrich via Apollo.io Organization API (Firmographics & Socials)
+        from .apollo_client import ApolloClient
+        apollo = ApolloClient()
+        apollo_data = apollo.enrich_company(domain)
+        if apollo_data:
+            if apollo_data.get("linkedin_company") and not socials.get("LinkedIn"):
+                socials["LinkedIn"] = apollo_data["linkedin_company"]
+            if apollo_data.get("twitter_company") and not socials.get("Twitter"):
+                socials["Twitter"] = apollo_data["twitter_company"]
+            if apollo_data.get("facebook_company") and not socials.get("Facebook"):
+                socials["Facebook"] = apollo_data["facebook_company"]
+            if not exp_data.get("employee_count") and apollo_data.get("employee_count"):
+                exp_data["employee_count"] = f"{apollo_data['employee_count']} Employees"
+
         primary_email = list(all_emails)[0] if all_emails else ""
         primary_phone = list(all_phones)[0] if all_phones else ""
 
